@@ -4,6 +4,10 @@ from scipy.fftpack import dct
 from enum import Enum
 import numpy as np
 import matplotlib.pyplot as PLT
+import pymongo
+from pymongo import MongoClient
+from bson.binary import Binary
+emotion_database=(MongoClient()).emotion
 audio_file_name_to_read="read_file.wav"
 transcript_file_name_to_read="read_file.txt"
 parsed_audio_Data=list()
@@ -44,7 +48,6 @@ def parse_transcript():
         data=file[index].split(" ",3)
         content=data[3].split(",",1)
         emotion_cat=content[0].split(" ")[0]
-
         parsed_emotion=parse_enum_type(emotion_cat)
         parsed_audio_Data.append(audio_cluster(int(frequency*float(data[0])),int(frequency*float(data[1])),content[0].rstrip("\n"),parsed_emotion))
         if parsed_emotion is not None or len(data)==4:
@@ -60,10 +63,9 @@ def write_to_file(index):
     global parsed_audio_Data
     if parsed_audio_Data[index].audio_bytes is not None:
         wavfile.write(parsed_audio_Data[index].content+".wav",frequency,parsed_audio_Data[index].audio_bytes)
-        print("File saved with name "+parsed_audio_Data[index].content+".wav")
+        #print("File saved with name "+parsed_audio_Data[index].content+".wav")
     else:
         print("Data Not Found for "+parsed_audio_Data[index].content)
-
 
 def pre_emphasis(data,pf):
     return np.append(data[0],data[1:]-pf*data[:-1])    
@@ -77,9 +79,9 @@ def framing(data,frame_size,frame_stride,frequency_of_signal):  #frame_size size
     no_of_frames=int(np.ceil(np.abs(data.size-length_of_each_frame)/unique_content_in_each_frame))+1
     new_length=((no_of_frames-1)*unique_content_in_each_frame)+length_of_each_frame
     padding=np.zeros(new_length-data.size)
-    print(padding.size)
+    #print(padding.size)
     data=np.append(data,padding)
-    print(data.size)
+    #print(data.size)
 
     return data[np.tile(np.arange(0,length_of_each_frame),(no_of_frames,1))+np.tile(range(0,(unique_content_in_each_frame)*no_of_frames,unique_content_in_each_frame),(length_of_each_frame,1)).T]
 
@@ -87,8 +89,8 @@ def windowing(data):
     return data*np.hamming(data[0].size)
 
 def fft_power_spectrum(data,No_of_points):
-    print("some   "+str(data[0].size))
-    print(np.fft.rfft(data,No_of_points)[0].size)
+    #print("some   "+str(data[0].size))
+    #print(np.fft.rfft(data,No_of_points)[0].size)
     return (np.absolute(np.fft.rfft(data,No_of_points))**2)/No_of_points
 
 def triangular_filter_banks(frequency,no_of_filters,No_of_points,data):
@@ -117,16 +119,37 @@ def mfcc(data):
 
 audio_reading(audio_file_name_to_read)
 parse_transcript()
-index=10
-print(parsed_audio_Data[index].content+"  "+str(parsed_audio_Data[index].emotion_category))
-voice_between_two_points(index)
-normalization_parameter = (np.ceil(np.log2(np.amax(parsed_audio_Data[index].audio_bytes[:,1]))))
-pre_emphasized_data=pre_emphasis(parsed_audio_Data[index].audio_bytes[:,1]/(2**normalization_parameter),0.97)       #signal is stereo so taking second values
+# print(len(parsed_audio_Data))
 
-framed_data=framing(pre_emphasized_data,0.025,0.001,frequency)
-windowed_data=windowing(framed_data)
-fft_power_spectrum_of_data=(fft_power_spectrum(windowed_data,512))
-dd=(triangular_filter_banks(frequency,40,512,fft_power_spectrum_of_data))
-PLT.pcolormesh(mfcc(dd))
-# PLT.plot(dd[1])
-PLT.show()
+index=0
+while index<len(parsed_audio_Data):
+	data={};
+	data["emotion_type"]=str(parsed_audio_Data[index].emotion_category)
+	voice_between_two_points(index)
+	normalization_parameter = (np.ceil(np.log2(np.amax(parsed_audio_Data[index].audio_bytes[:,1]))))
+	pre_emphasized_data=pre_emphasis(parsed_audio_Data[index].audio_bytes[:,1]/(2**normalization_parameter),0.97)       #signal is stereo so taking second values
+	print("            Pre emphasises Done")
+	framed_data=framing(pre_emphasized_data,0.025,0.001,frequency)
+	print("            Framing Done")
+	windowed_data=windowing(framed_data)
+	print("            Windowing Done")
+	fft_power_spectrum_of_data=(fft_power_spectrum(windowed_data,512))
+	print("            FFT Done")
+	dd=mfcc(triangular_filter_banks(frequency,40,512,fft_power_spectrum_of_data))
+	print("            Triangular Filter Bank")
+	# frame_index=0
+	# for frame_data in dd:
+	# 	data["sample"+str(index)+"frame"+str(frame_index)]=framed_data.mean();
+	# 	frame_index=frame_index+1
+	# # print(str(parsed_audio_Data[index].emotion_category)+"    "+str(dd[0].mean()))
+	index_of_mongo=np.array_str(np.arange(len(dd[1,:])))
+	# print(np.append(index,np.mean(dd,1),axis=1)[1:5])
+	data.update(dict(zip(index_of_mongo,np.mean(dd,1))))
+	index=index+1
+	emotion_database.data.insert_one(data)
+	print(index)
+
+
+
+# PLT.pcolormesh(mfcc(dd))
+# # PLT.plot(dd[1])
