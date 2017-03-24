@@ -26,6 +26,7 @@ class emotion_type(Enum):
     contempt=11
     shame=12
     panic=13
+    none=14
 class audio_cluster:
     def __init__(self,start_index,final_index,data,emotion_type):
         self.starting_index=start_index
@@ -117,14 +118,39 @@ def mfcc(data):
     mfcc = dct(data, type=2, axis=1, norm='ortho')[:, 1 : (12)] 
     return mfcc
 
+def segmentation(data):
+    no_of_segments=int(np.ceil(len(data)/25))
+    segment=0
+    segmented_data=list()
+    while(segment<no_of_segments):
+    	if(len(data)>=(segment+1)*25):
+    		segmented_data.append((np.mean(data[segment*25:(segment+1)*25],0)))
+    	else:
+    		segmented_data.append(np.mean(data[segment*25:],0))		
+    	segment=segment+1
+    return segmented_data
+
+
 audio_reading(audio_file_name_to_read)
 parse_transcript()
-# print(len(parsed_audio_Data))
+
+index_of_mongo=[str(ind) for ind in (np.arange(11))]				
+def unpacking(data,emotion_type):
+	if emotion_type==None:
+		emotion_type=parse_enum_type('none')
+	unpacked_data=list()
+	for data_point in data:
+		data_point=dict(zip(index_of_mongo,data_point))
+		data_point["emotion"]=emotion_type.value
+		unpacked_data.append(data_point)
+	# print(unpacked_data)
+	return unpacked_data
 
 index=0
+
+
+# emotion_database.data.remove()
 while index<len(parsed_audio_Data):
-	data={};
-	data["emotion_type"]=str(parsed_audio_Data[index].emotion_category)
 	voice_between_two_points(index)
 	normalization_parameter = (np.ceil(np.log2(np.amax(parsed_audio_Data[index].audio_bytes[:,1]))))
 	pre_emphasized_data=pre_emphasis(parsed_audio_Data[index].audio_bytes[:,1]/(2**normalization_parameter),0.97)       #signal is stereo so taking second values
@@ -137,18 +163,18 @@ while index<len(parsed_audio_Data):
 	print("            FFT Done")
 	dd=mfcc(triangular_filter_banks(frequency,40,512,fft_power_spectrum_of_data))
 	print("            Triangular Filter Bank")
-	# frame_index=0
-	# for frame_data in dd:
-	# 	data["sample"+str(index)+"frame"+str(frame_index)]=framed_data.mean();
-	# 	frame_index=frame_index+1
-	# # print(str(parsed_audio_Data[index].emotion_category)+"    "+str(dd[0].mean()))
-	index_of_mongo=np.array_str(np.arange(len(dd[1,:])))
-	# print(np.append(index,np.mean(dd,1),axis=1)[1:5])
-	data.update(dict(zip(index_of_mongo,np.mean(dd,1))))
+	dd=segmentation(dd)
+	emotion_database.segment_data.insert_many(unpacking(dd,parsed_audio_Data[index].emotion_category))
+	print("segmentation done")
 	index=index+1
-	emotion_database.data.insert_one(data)
 	print(index)
 
+   # print("segmentation")
+    # frame_index=0
+   # for frame_data in dd:
+   #  data["sample"+str(index)+"frame"+str(frame_index)]=framed_data.mean();
+   #  frame_index=frame_index+1
+   # # print(str(parsed_audio_Data[index].emotion_category)+"    "+str(dd[0].mean()))
 
 
 # PLT.pcolormesh(mfcc(dd))
