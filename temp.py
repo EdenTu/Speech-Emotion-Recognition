@@ -7,7 +7,7 @@ import matplotlib.pyplot as PLT
 import pymongo
 from pymongo import MongoClient
 from bson.binary import Binary
-emotion_database=(MongoClient()).emotion
+# emotion_database=(MongoClient()).emotion
 audio_file_name_to_read="read_file.wav"
 transcript_file_name_to_read="read_file.txt"
 parsed_audio_Data=list()
@@ -26,7 +26,8 @@ class emotion_type(Enum):
     contempt=11
     shame=12
     panic=13
-    none=14
+    hot=14
+    cold=15
 class audio_cluster:
     def __init__(self,start_index,final_index,data,emotion_type):
         self.starting_index=start_index
@@ -50,9 +51,10 @@ def parse_transcript():
         content=data[3].split(",",1)
         emotion_cat=content[0].split(" ")[0]
         parsed_emotion=parse_enum_type(emotion_cat)
-        parsed_audio_Data.append(audio_cluster(int(frequency*float(data[0])),int(frequency*float(data[1])),content[0].rstrip("\n"),parsed_emotion))
+        if parsed_emotion is not None:
+            parsed_audio_Data.append(audio_cluster(int(frequency*float(data[0])),int(frequency*float(data[1])),content[0].rstrip("\n"),parsed_emotion))
         if parsed_emotion is not None or len(data)==4:
-       		 index=index+2
+            index=index+2
 def voice_between_two_points(index):
     global audio_data,parsed_audio_Data
     parsed_audio_Data[index].audio_bytes=audio_data[parsed_audio_Data[index].starting_index:parsed_audio_Data[index].final_index]
@@ -134,48 +136,26 @@ def segmentation(data):
 audio_reading(audio_file_name_to_read)
 parse_transcript()
 
-index_of_mongo=[str(ind) for ind in (np.arange(11))]				
-def unpacking(data,emotion_type):
-	if emotion_type==None:
-		emotion_type=parse_enum_type('none')
-	unpacked_data=list()
-	for data_point in data:
-		data_point=dict(zip(index_of_mongo,data_point))
-		data_point["emotion"]=emotion_type.value
-		unpacked_data.append(data_point)
-	# print(unpacked_data)
+
+
+def unpack(data,data1,data2,emotion_type):
+	unpacked_data=[{"data":np.concatenate((data[index],data1[index],data2[index])).tolist(),"emotion":emotion_type.value} for index in range(len(data))]
+	print(type(unpacked_data))
 	return unpacked_data
 
-index=0
 
-
-# emotion_database.data.remove()
-while index<len(parsed_audio_Data):
-	voice_between_two_points(index)
-	normalization_parameter = (np.ceil(np.log2(np.amax(parsed_audio_Data[index].audio_bytes[:,1]))))
-	pre_emphasized_data=pre_emphasis(parsed_audio_Data[index].audio_bytes[:,1]/(2**normalization_parameter),0.97)       #signal is stereo so taking second values
-	print("            Pre emphasises Done")
-	framed_data=framing(pre_emphasized_data,0.025,0.001,frequency)
-	print("            Framing Done")
-	windowed_data=windowing(framed_data)
-	print("            Windowing Done")
-	fft_power_spectrum_of_data=(fft_power_spectrum(windowed_data,512))
-	print("            FFT Done")
-	dd=mfcc(triangular_filter_banks(frequency,40,512,fft_power_spectrum_of_data))
-	print("            Triangular Filter Bank")
-	dd=segmentation(dd)
-	emotion_database.segment_data.insert_many(unpacking(dd,parsed_audio_Data[index].emotion_category))
-	print("segmentation done")
-	index=index+1
-	print(index)
-
-   # print("segmentation")
-    # frame_index=0
-   # for frame_data in dd:
-   #  data["sample"+str(index)+"frame"+str(frame_index)]=framed_data.mean();
-   #  frame_index=frame_index+1
-   # # print(str(parsed_audio_Data[index].emotion_category)+"    "+str(dd[0].mean()))
-
-
-# PLT.pcolormesh(mfcc(dd))
-# # PLT.plot(dd[1])
+def get_mfcc_feature_vector():
+    index=0
+    mfcc_feature_data=list()
+    while index<len(parsed_audio_Data) and index<10:
+    	voice_between_two_points(index)
+    	normalization_parameter = (np.ceil(np.log2(np.amax(parsed_audio_Data[index].audio_bytes[:,1]))))
+    	pre_emphasized_data=pre_emphasis(parsed_audio_Data[index].audio_bytes[:,1]/(2**normalization_parameter),0.97)       #signal is stereo so taking second values
+    	framed_data=framing(pre_emphasized_data,0.025,0.001,frequency)
+    	windowed_data=windowing(framed_data)
+    	fft_power_spectrum_of_data=(fft_power_spectrum(windowed_data,512))
+    	dd=mfcc(triangular_filter_banks(frequency,40,512,fft_power_spectrum_of_data))
+    	mfcc_feature_data.append({'data':dd,'emotion':parsed_audio_Data[index].emotion_category})
+    	# mfcc_feature_data+=unpacking(dd,parsed_audio_Data[index].emotion_category)
+    	index=index+1
+    return mfcc_feature_data
