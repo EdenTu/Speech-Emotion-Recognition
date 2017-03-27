@@ -147,7 +147,7 @@ def unpack(data,data1,data2,emotion_type):
 def get_mfcc_feature_vector():
     index=0
     mfcc_feature_data=list()
-    while index<len(parsed_audio_Data) and index<10:
+    while index<len(parsed_audio_Data):
     	voice_between_two_points(index)
     	normalization_parameter = (np.ceil(np.log2(np.amax(parsed_audio_Data[index].audio_bytes[:,1]))))
     	pre_emphasized_data=pre_emphasis(parsed_audio_Data[index].audio_bytes[:,1]/(2**normalization_parameter),0.97)       #signal is stereo so taking second values
