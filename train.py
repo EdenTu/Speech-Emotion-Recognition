@@ -39,7 +39,7 @@ for index in range(16):
 	result.append(list())
 
 
-model.fit(X[:-100], Y[:-100],batch_size=32,epochs=1)
+model.fit(X[:-100], Y[:-100],batch_size=32,epochs=50)
 
 # loss_and_metrics = model.evaluate(X[train_length:], Y[train_length:], batch_size=128)
 classes = model.predict(X[(len(X)-100):], batch_size=128)
